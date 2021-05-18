@@ -9,18 +9,24 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NejcZdovc/comment-pr.git"
+    "url": "git+https://github.com/sesam/pr-comment-size-budget.git"
   },
-  "keywords": ["github action", "comment", "actions", "comment PR"],
-  "author": "Nejc Zdovc",
+  "keywords": [
+    "github action",
+    "comment",
+    "actions",
+    "comment PR"
+  ],
+  "author": "Nejc Zdovc and Simon Bohlin",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/NejcZdovc/comment-pr/issues"
+    "url": "https://github.com/sesam/pr-comment-size-budget/issues"
   },
-  "homepage": "https://github.com/NejcZdovc/comment-pr#readme",
+  "homepage": "https://github.com/sesam/pr-comment-size-budget#readme",
   "dependencies": {
     "@actions/core": "^1.2.6",
-    "@actions/github": "^4.0.0"
+    "@actions/github": "^4.0.0",
+    "fast-folder-size": "^1.3.0"
   },
   "devDependencies": {
     "@vercel/ncc": "^0.25.1",

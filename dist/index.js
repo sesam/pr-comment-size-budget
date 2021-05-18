@@ -10,143 +10,126 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _actions_github__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(438);
 /* harmony import */ var _actions_github__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(_actions_github__WEBPACK_IMPORTED_MODULE_0__);
 
-const core = __webpack_require__(186)
-const { promises: fs } = __webpack_require__(747)
-const path = __webpack_require__(622)
+const core = __webpack_require__(186);
+const { promises } = __webpack_require__(747);
+const path = __webpack_require__(622);
+const fastFolderSize = __webpack_require__(729);
 
-const getInputs = () => ({
-  message: core.getInput('message'),
-  file: core.getInput('file'),
-  singleComment: core.getInput('single_comment') === 'true',
-  identifier: core.getInput('identifier'),
-  githubToken: core.getInput('github_token') || process.env.GITHUB_TOKEN
-})
-
-const getIdentifier = () => {
-  const { identifier } = getInputs()
-  if (!identifier) {
-    throw new Error('Identifier is should not be empty string, identifier is optional.')
-  }
-  return `<!-- ${identifier} -->`
-}
+const getIdentifier = () =>
+  `<!-- ${core.getInput("identifier") || "PR_SIZE_CHANGE_COMMENT"} -->`;
 
 const getFileContent = async () => {
-  const { file } = getInputs()
+  const file = core.getInput("file");
+  if (!file) return null;
+  const filePath = path.resolve(process.cwd(), `.github/workflows/${file}`);
+  return await promises.readFile(filePath, "utf8");
+};
 
-  if (!file) {
-    return null
-  }
-
-  const filePath = path.resolve(process.cwd(), `.github/workflows/${file}`)
-  const content = await fs.readFile(filePath, 'utf8')
-  if (!content) {
-    return null
-  }
-
-  return content.replace(/{\w+}/g, (key) => {
-    const envKey = key.substring(1, key.length - 1)
-    if (process.env[envKey]) {
-      return process.env[envKey]
-    }
-
-    return key
-  })
+function formatSize(size) {
+  return `${Math.floor(size / 1000) / 1000}kB`;
 }
 
-const getMessage = async () => {
-  const { message } = getInputs()
+function getSize() {
+  const buildFolder = path.resolve(
+    process.cwd(),
+    core.getInput("budgeted_folder") || "build"
+  );
 
-  let body
-  if (!message) {
-    body = await getFileContent()
-  } else {
-    body = message
-  }
-
-  if (!body) {
-    throw new Error('You need to provide message or file input')
-  }
-
-  return `${getIdentifier()}\n${body}`
+  let size;
+  fastFolderSize(buildFolder, (err, bytes) => {
+    if (err) throw err;
+    size = bytes;
+  });
+  return size;
 }
 
-const findComment = async (client) => {
-  const comments = await client.issues
-    .listComments({
-      owner: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.owner,
-      repo: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.repo,
-      issue_number: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.number
-    })
+function processContent(content) {
+  // Example: {verdict} - build size is {size} vs budgeted {budget}
+  const budget = parseFloat(core.getInput("budget"));
 
-  const identifier = getIdentifier()
+  const size = getSize();
+
+  const map = {
+    budget: formatSize(budget),
+    size: formatSize(size),
+    verdict: size < budget ? "✅ OK" : "🛑 Over size budget",
+  };
+
+  // Minimal {} to env value substitution
+  return content.replace(/{\w+}/g, (string) => {
+    const key = string.substring(1, string.length - 1);
+    return map[key] || `(${key})`;
+  });
+}
+
+async function getBody() {
+  const content = await getFileContent();
+  if (!content) throw new Error(`No content from processing ${file}`);
+
+  return `${getIdentifier()}\n${processContent(content)}`;
+}
+
+async function findComment(client) {
+  const comments = await client.issues.listComments({
+    owner: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.owner,
+    repo: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.repo,
+    issue_number: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.number,
+  });
+
+  const identifier = getIdentifier();
 
   for (const comment of comments.data) {
     if (comment.body.startsWith(identifier)) {
-      return comment.id
+      return comment.id;
     }
   }
-
-  return null
 }
 
-const getClient = () => {
-  const { githubToken } = getInputs()
-  if (!githubToken) {
-    throw new Error('No github token provided')
-  }
+const githubToken = process.env.GITHUB_TOKEN;
+async function getClient() {
+  if (!githubToken) throw new Error("No github token provided");
+  if (!_actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.number) throw new Error("No issue number found.");
 
-  if (!_actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.number) {
-    throw new Error('This is not PR or commenting is disabled.')
-  }
+  const client = (0,_actions_github__WEBPACK_IMPORTED_MODULE_0__.getOctokit)(githubToken);
+  if (!client) throw new Error("Failed to create client.");
 
-  const client = (0,_actions_github__WEBPACK_IMPORTED_MODULE_0__.getOctokit)(githubToken)
-  if (!client) {
-    throw new Error('Client couldn\'t be created, make sure that token is correct.')
-  }
-
-  return client
+  return client;
 }
 
 const comment = async (client) => {
-  const { singleComment } = getInputs()
-  let commentId = null
-  if (singleComment) {
-    commentId = await findComment(client)
-  }
+  const singleComment = core.getInput("single_comment") === "true";
+  const comment_id = singleComment && (await findComment(client));
+  const body = await getBody();
 
-  const body = await getMessage()
-  if (commentId) {
-    await client.issues
-      .updateComment({
-        owner: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.owner,
-        repo: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.repo,
-        comment_id: commentId,
-        body
-      })
-    core.setOutput('commented', 'true')
-    return
-  }
-
-  await client.issues
-    .createComment({
+  if (comment_id) {
+    await client.issues.updateComment({
+      body,
+      comment_id,
+      owner: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.owner,
+      repo: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.repo,
+    });
+    core.setOutput("commented", "true");
+  } else {
+    await client.issues.createComment({
+      body,
       issue_number: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.number,
       owner: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.repo.owner,
       repo: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.repo.repo,
-      body
-    })
-}
+    });
+  }
+};
 
 const run = async () => {
   try {
-    await comment(getClient())
-    core.setOutput('commented', 'true')
+    await comment(getClient());
+    core.setOutput("commented", "true");
   } catch (error) {
-    core.setOutput('commented', 'false')
-    core.setFailed(error.message)
+    core.setOutput("commented", "false");
+    core.setFailed(error.message);
   }
-}
+};
 
-run()
+run();
 
 
 /***/ }),
@@ -3820,6 +3803,68 @@ exports.Deprecation = Deprecation;
 
 /***/ }),
 
+/***/ 729:
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+"use strict";
+
+
+const path = __webpack_require__(622)
+const { exec } = __webpack_require__(129)
+
+function fastFolderSize(target, cb) {
+  // windows
+  if (process.platform === 'win32') {
+    return exec(
+      `"${path.join(
+        __dirname,
+        'bin',
+        'du.exe'
+      )}" -nobanner -accepteula -q -c .`,
+      { cwd: target },
+      (err, stdout) => {
+        if (err) return cb(err)
+
+        // query stats indexes from the end since path can contain commas as well
+        const stats = stdout.split('\n')[1].split(',')
+
+        cb(null, +stats.slice(-2)[0])
+      }
+    )
+  }
+
+  // mac
+  if (process.platform === 'darwin') {
+    return exec(`du -sk .`, { cwd: target }, (err, stdout) => {
+      if (err) return cb(err)
+
+      const match = /^(\d+)/.exec(stdout)
+
+      const bytes = Number(match[1]) * 1024
+
+      cb(null, bytes)
+    })
+  }
+
+  // others
+  return exec(`du -sb .`, { cwd: target }, (err, stdout) => {
+    if (err) return cb(err)
+
+    const match = /^(\d+)/.exec(stdout)
+
+    const bytes = Number(match[1])
+
+    cb(null, bytes)
+  })
+}
+
+module.exports = fastFolderSize
+
+if (false) {}
+
+
+/***/ }),
+
 /***/ 287:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -5931,6 +5976,14 @@ module.exports = eval("require")("encoding");
 
 "use strict";
 module.exports = require("assert");;
+
+/***/ }),
+
+/***/ 129:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("child_process");;
 
 /***/ }),
 

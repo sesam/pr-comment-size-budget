@@ -1,26 +1,24 @@
-name: 'Simple comment PR'
-author: 'Nejc Zdovc'
-description: 'Add comments in the PR with your GitHub Actions workflow.'
+name: "PR comment on size change (based on Simple comment PR by Nejc Zdovc)"
+author: "Nejc Zdovc and Simon Bohlin"
+description: "Comments in the Github PR when app size changes."
 inputs:
-  message:
-    description: 'Message for the PR'
+  budget:
+    description: "Expected build size limit"
   file:
-    description: 'Name for comment md file'
+    description: "Path to .md file"
   single_comment:
-    description: 'Would you only like one comment from the action in the PR?'
-    default: 'true'
+    description: "Would you only like one comment from the action in the PR?"
+    default: "true"
   identifier:
-    description: 'Hidden message that is used to identify comment PR'
-    default: 'GITHUB_ACTION_COMMENT_PR'
-  github_token:
-    description: 'Github token that is used for commenting'
-    required: true
+    description: "Hidden string (md/html comment). Used to identify comment PR"
+  budgeted_folder:
+    description: "Path to the budgeted directory, i.e. build/ or subfolder/build"
 outputs:
   commented:
-    description: 'Tells you if comment was added to the PR or not, boolean'
+    description: "Tells you if comment was added to the PR or not, boolean"
 branding:
   icon: message-square
   color: orange
 runs:
-  using: 'node12'
-  main: 'dist/index.js'
+  using: "node12"
+  main: "dist/index.js"
