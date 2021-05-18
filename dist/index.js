@@ -55,7 +55,6 @@ function processContent(content) {
     verdict: size < budget ? "✅ OK" : "🛑 Over size budget",
   };
 
-  // Minimal {} to env value substitution
   return content.replace(/{\w+}/g, (string) => {
     const key = string.substring(1, string.length - 1);
     return map[key] || `(${key})`;

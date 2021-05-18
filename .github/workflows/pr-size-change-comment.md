@@ -1,5 +1,3 @@
-## Size change
+## Build size
 
-| Old size | New size | Diff                     |
-| -------- | -------- | ------------------------ |
-| {OLD}    | {NEW}    | {DIFF} ({DIFF_PERCENT}%) |
+{verdict} - build size is {size} vs budgeted {budget}
