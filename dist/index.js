@@ -70,6 +70,7 @@ async function getBody() {
 }
 
 async function findComment(client) {
+  if (!client.issues) return;
   const comments = await client.issues.listComments({
     owner: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.owner,
     repo: _actions_github__WEBPACK_IMPORTED_MODULE_0__.context.issue.repo,

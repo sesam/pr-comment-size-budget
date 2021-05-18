@@ -59,6 +59,7 @@ async function getBody() {
 }
 
 async function findComment(client) {
+  if (!client.issues) return;
   const comments = await client.issues.listComments({
     owner: context.issue.owner,
     repo: context.issue.repo,
